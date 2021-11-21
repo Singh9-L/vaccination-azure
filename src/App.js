@@ -1,27 +1,36 @@
 import React, { Component } from 'react';
 import './App.css';
 
-class App extends Component {
+import {supabase} from './client.js'
 
+class App extends Component {
+  currentID = 1000
   constructor(props){
     super(props);
     this.state={
       title: 'Vaccination checklist',
       act: 0,
       index: '',
-      datas: [{
-        name:'John W', address:'Brussels', number : 147852369, birthDate : '2000-10-22', vaccinated : true
-      },{
-        name:'Denn K', address:'Kharkiv', number : 456321789, birthDate : '1998-08-13', vaccinated : false
-      },{
-        name:'Olia M', address:'Vilnius', number : 564852136, birthDate : '1999-02-18', vaccinated : true
-      },{
-        name:'Claudia S', address:'Naples', number : 753123654, birthDate : '1997-05-15', vaccinated : false
-      },{
-        name:'Katia K', address:'Minsk', number : 578945612, birthDate : '1996-11-12', vaccinated : true
-      }]
+      datas: []
     }
   } 
+
+  insertEntry = async (item) =>{
+    const insertData = {...item, birthDate: new Date(item.birthDate).toISOString().replace('.000Z', "")}
+
+    const {data, error} = await supabase.from('vaccination-list').insert([insertData])
+    console.log(error)
+  }
+  updateEntry = async (item) =>{
+    const updateData = {...item, birthDate: new Date(item.birthDate).toISOString().replace('.000Z', "")}
+
+    const {data, error} = await supabase.from('vaccination-list').update(updateData).match({id:updateData.id})
+  }
+  deleteEntry = async (id) =>{
+    const insertData = {}
+
+    const {data, error} = await supabase.from('vaccination-list').delete().match({id})
+  }
 
   fSubmit = (e) =>{
     e.preventDefault();
@@ -34,16 +43,22 @@ class App extends Component {
 
     if(this.state.act === 0){   //new
       let data = {
-        name, address, number, birthDate, vaccinated
+        id: ++this.currentID, name, address, number, birthDate, vaccinated
       }
       datas.push(data);
-    }else{                      //update
+      this.insertEntry(data)
+    }else{     
       let index = this.state.index;
-      datas[index].name = name;
-      datas[index].address = address;
-      datas[index].number = number;
-      datas[index].birthDate = birthDate;
-      datas[index].vaccinated = vaccinated;
+      let data = {
+        id: index, name, address, number, birthDate, vaccinated
+      }                 //update
+      const itemIndex = datas.findIndex(el => el.id === index)
+      datas[itemIndex].name = name;
+      datas[itemIndex].address = address;
+      datas[itemIndex].number = number;
+      datas[itemIndex].birthDate = birthDate;
+      datas[itemIndex].vaccinated = vaccinated;
+      this.updateEntry(data)
     }    
 
     this.setState({
@@ -55,32 +70,56 @@ class App extends Component {
     this.refs.name.focus();
   }
 
-  fRemove = (i) => {
+  fRemove = (id) => {
     let datas = this.state.datas;
-    datas.splice(i,1);
+    datas.splice(datas.findIndex(el => el.id === id),1);
     this.setState({
       datas: datas
     });
+    this.deleteEntry(id)
 
     this.refs.myForm.reset();
     this.refs.name.focus();
   }
 
-  fEdit = (i) => {
-    let data = this.state.datas[i];
+  fEdit = (id) => {
+    console.log(id)
+    const index = this.state.datas.findIndex(el => el.id === id)
+    console.log(index)
+    let data = this.state.datas[index];
     this.refs.name.value = data.name;
     this.refs.address.value = data.address;
     this.refs.phoneNumber.value = data.number;
     this.refs.birthDate.value = data.birthDate;
     this.refs.vaccinated.checked = data.vaccinated;
 
+    console.log(data.birthDate)
+
     this.setState({
       act: 1,
-      index: i
+      index: id
     });
 
     this.refs.name.focus();
   }  
+
+  loadSupabase = async () => {
+    const data = await supabase.from('vaccination-list').select()
+    console.log(data.data)
+    const vaccinationData = data.data.map(el => {
+      this.currentID = Math.max(this.currentID, el.id)
+      return({
+        ...el,
+        birthDate: new Date(el.birthDate).toISOString().substr(0, 10)
+      })
+    })
+    this.setState({datas : vaccinationData})
+    console.log(vaccinationData)
+  }
+
+  componentDidMount(){
+    this.loadSupabase()
+  }
 
   render() {
     let datas = this.state.datas;
@@ -102,8 +141,8 @@ class App extends Component {
           {datas.map((data, i) =>
             <li key={i} className="myList">
               {i+1}. {data.name}, {data.address}, {data.birthDate},{data.number},{data.vaccinated ? 'Vaccinated' : 'Not vaccinated'}
-              <button onClick={()=>this.fRemove(i)} className="myListButton">remove </button>
-              <button onClick={()=>this.fEdit(i)} className="myListButton">edit </button>
+              <button onClick={()=>this.fRemove(data.id)} className="myListButton">remove </button>
+              <button onClick={()=>this.fEdit(data.id)} className="myListButton">edit </button>
             </li>
           )}
         </pre>
